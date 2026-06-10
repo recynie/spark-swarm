@@ -74,15 +74,21 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     return _to_detail(task)
 
 
-@router.delete("/{task_id}", response_model=TaskDetail)
-def cancel_task(task_id: str, db: Session = Depends(get_db)):
+_DELETABLE_STATUSES = {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED}
+
+
+@router.delete("/{task_id}")
+def delete_or_cancel_task(task_id: str, db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.status != TaskStatus.PENDING:
-        raise HTTPException(status_code=409, detail="Only PENDING tasks can be cancelled")
-    task.status = TaskStatus.CANCELLED
-    task.completed_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(task)
-    return _to_detail(task)
+    if task.status == TaskStatus.PENDING:
+        task.status = TaskStatus.CANCELLED
+        task.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"detail": "Task cancelled"}
+    if task.status in _DELETABLE_STATUSES:
+        db.delete(task)
+        db.commit()
+        return {"detail": "Task deleted"}
+    raise HTTPException(status_code=409, detail="Can only cancel PENDING or delete completed tasks")
