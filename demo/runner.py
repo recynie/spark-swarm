@@ -152,11 +152,12 @@ def main() -> int:
     print(f"\n[2/3] Starting {AGENT_COUNT} agents...")
     for i in range(AGENT_COUNT):
         env = _make_agent_env(i)
+        log_file = (DEMO_DIR / f"agent-{i + 1}.log").open("w")
         agent = subprocess.Popen(
             [sys.executable, "-m", "agent.main"],
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
         )
         procs.append(agent)
         print(f"  Agent {i + 1}: {env['SPARK_SWARM_AGENT_HOSTNAME']} ({env['SPARK_SWARM_AGENT_IP_ADDRESS']})")

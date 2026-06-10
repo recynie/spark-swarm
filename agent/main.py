@@ -50,46 +50,49 @@ def run_loop(iterations: int | None = None) -> None:
     remaining = iterations
     host_id = _load_host_id()
     while remaining is None or remaining > 0:
-        payload = {
-            "host_id": host_id,
-            "hostname": settings.hostname,
-            "ip_address": _detect_ip_address(),
-            **collect_resources(),
-        }
-        response = post_heartbeat(settings.master_url, payload)
-        host_id = response["host_id"]
-        _store_host_id(host_id)
-        assigned_task = response.get("assigned_task")
-        if assigned_task:
-            update_status(settings.master_url, assigned_task["id"], "BUILDING")
-            result = execute_task(assigned_task, settings.output_dir)
-            if result.error_message and result.exit_code is None:
-                upload_result(
-                    settings.master_url,
-                    assigned_task["id"],
-                    {
-                        "status": result.status,
-                        "stdout_log": result.stdout_log,
-                        "stderr_log": result.stderr_log,
-                        "exit_code": result.exit_code,
-                        "error_message": result.error_message,
-                        "output_files": result.output_files,
-                    },
-                )
-            else:
-                update_status(settings.master_url, assigned_task["id"], "RUNNING")
-                upload_result(
-                    settings.master_url,
-                    assigned_task["id"],
-                    {
-                        "status": result.status,
-                        "stdout_log": result.stdout_log,
-                        "stderr_log": result.stderr_log,
-                        "exit_code": result.exit_code,
-                        "error_message": result.error_message,
-                        "output_files": result.output_files,
-                    },
-                )
+        try:
+            payload = {
+                "host_id": host_id,
+                "hostname": settings.hostname,
+                "ip_address": _detect_ip_address(),
+                **collect_resources(),
+            }
+            response = post_heartbeat(settings.master_url, payload)
+            host_id = response["host_id"]
+            _store_host_id(host_id)
+            assigned_task = response.get("assigned_task")
+            if assigned_task:
+                update_status(settings.master_url, assigned_task["id"], "BUILDING")
+                result = execute_task(assigned_task, settings.output_dir)
+                if result.error_message and result.exit_code is None:
+                    upload_result(
+                        settings.master_url,
+                        assigned_task["id"],
+                        {
+                            "status": result.status,
+                            "stdout_log": result.stdout_log,
+                            "stderr_log": result.stderr_log,
+                            "exit_code": result.exit_code,
+                            "error_message": result.error_message,
+                            "output_files": result.output_files,
+                        },
+                    )
+                else:
+                    update_status(settings.master_url, assigned_task["id"], "RUNNING")
+                    upload_result(
+                        settings.master_url,
+                        assigned_task["id"],
+                        {
+                            "status": result.status,
+                            "stdout_log": result.stdout_log,
+                            "stderr_log": result.stderr_log,
+                            "exit_code": result.exit_code,
+                            "error_message": result.error_message,
+                            "output_files": result.output_files,
+                        },
+                    )
+        except Exception as exc:
+            print(f"[{settings.hostname}] loop error: {exc}", flush=True)
         if remaining is not None:
             remaining -= 1
             if remaining == 0:
