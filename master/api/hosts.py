@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,15 +20,18 @@ def list_hosts(db: Session = Depends(get_db)):
 
 
 @router.post("/agent/heartbeat", response_model=HeartbeatResponse)
-def heartbeat(payload: HostHeartbeat, db: Session = Depends(get_db)):
+def heartbeat(payload: HostHeartbeat, request: Request, db: Session = Depends(get_db)):
+    # Use the actual remote IP from the TCP connection, not what the agent reports
+    real_ip = request.client.host if request.client else payload.ip_address
+
     host = db.get(Host, payload.host_id) if payload.host_id else None
     if host is None:
-        host = Host(hostname=payload.hostname, ip_address=payload.ip_address)
+        host = Host(hostname=payload.hostname, ip_address=real_ip)
         db.add(host)
         db.flush()
 
     host.hostname = payload.hostname
-    host.ip_address = payload.ip_address
+    host.ip_address = real_ip
     host.status = HostStatus.ONLINE
     host.cpu_total = payload.cpu_total
     host.cpu_available = payload.cpu_available
