@@ -489,8 +489,17 @@ function renderTasks(tasks) {
   if (!tasks.length) {
     container.innerHTML = '<div class="empty-state"><div class="icon">📋</div><div>No tasks yet. Submit one above!</div></div>';
     lastTaskStatuses = {};
+    expandedLogs.clear();
     return;
   }
+
+  // Save scroll positions of open logs before rebuild
+  const scrollPos = {};
+  expandedLogs.forEach(id => {
+    const el = document.getElementById('logs-' + id);
+    if (el) scrollPos[id] = el.scrollTop;
+  });
+
   container.innerHTML = tasks.map(t => {
     const status = t.status;
     const changed = lastTaskStatuses[t.id] && lastTaskStatuses[t.id] !== status;
@@ -529,13 +538,14 @@ function renderTasks(tasks) {
       </div>`;
   }).join('');
 
-  // Re-expand logs that were open before re-render
+  // Re-expand logs and restore scroll position
   expandedLogs.forEach(id => {
     const el = document.getElementById('logs-' + id);
     const btn = el?.previousElementSibling;
     if (el && btn) {
       el.classList.add('open');
       btn.textContent = 'Hide Logs ▾';
+      if (scrollPos[id] !== undefined) el.scrollTop = scrollPos[id];
     }
   });
 
