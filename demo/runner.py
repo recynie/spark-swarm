@@ -106,10 +106,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
             super().do_DELETE()
 
     def log_message(self, format, *args):
-        if "/api/" in (args[0] if args else ""):
-            sys.stdout.write(f"  [proxy] {args[0]}\n")
-        else:
-            pass  # suppress static file logs
+        first = str(args[0]) if args else ""
+        if "/api/" in first:
+            sys.stdout.write(f"  [proxy] {first}\n")
 
 
 def main() -> int:
