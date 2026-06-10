@@ -17,12 +17,18 @@ app = typer.Typer(add_completion=False)
 
 
 def _detect_ip_address() -> str:
+    # 1. Explicit config takes priority
     if settings.ip_address != "127.0.0.1":
         return settings.ip_address
+    # 2. Pick first non-loopback interface IP
     try:
-        return socket.gethostbyname(socket.gethostname())
-    except OSError:
-        return settings.ip_address
+        for _name, addrs in psutil.net_if_addrs().items():
+            for a in addrs:
+                if a.family == socket.AF_INET and not a.address.startswith("127."):
+                    return a.address
+    except Exception:
+        pass
+    return settings.ip_address
 
 
 def _load_host_id() -> str | None:
