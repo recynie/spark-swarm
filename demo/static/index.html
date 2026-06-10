@@ -398,6 +398,8 @@ async function submitTask() {
 
 // ── Data fetching ──
 let lastTaskStatuses = {};
+let taskDetails = {};       // taskId → detail (with logs)
+let hostMap = {};           // hostId → hostname + ip
 
 async function fetchData() {
   try {
@@ -407,9 +409,30 @@ async function fetchData() {
     ]);
     const hosts = hostsResp.ok ? await hostsResp.json() : [];
     const tasks = tasksResp.ok ? await tasksResp.json() : [];
+
+    hostMap = {};
+    hosts.forEach(h => { hostMap[h.id] = h.hostname || h.ip_address; });
+
+    // Fetch details for completed tasks we haven't cached yet
+    const finalStatuses = ['SUCCESS', 'FAILED', 'CANCELLED'];
+    const toFetch = tasks.filter(t => finalStatuses.includes(t.status) && !taskDetails[t.id]);
+    if (toFetch.length) {
+      const details = await Promise.allSettled(
+        toFetch.map(t => fetch('/api/v1/tasks/' + t.id).then(r => r.ok ? r.json() : null))
+      );
+      toFetch.forEach((t, i) => {
+        if (details[i].status === 'fulfilled' && details[i].value) {
+          taskDetails[t.id] = details[i].value;
+        }
+      });
+    }
+
+    // Merge cached details into task list
+    const enriched = tasks.map(t => ({ ...t, ...(taskDetails[t.id] || {}) }));
+
     renderHosts(hosts);
-    renderTasks(tasks);
-    updateHeader(hosts, tasks);
+    renderTasks(enriched);
+    updateHeader(hosts, enriched);
   } catch (_) { /* master not up yet */ }
 }
 
@@ -475,7 +498,7 @@ function renderTasks(tasks) {
     const duration = t.started_at
       ? fmtDuration((t.completed_at ? new Date(t.completed_at + 'Z') : new Date()) - new Date(t.started_at + 'Z'))
       : '';
-    const hostLabel = t.assigned_host_id ? t.assigned_host_id.slice(0, 8) : '—';
+    const hostLabel = t.assigned_host_id ? (hostMap[t.assigned_host_id] || t.assigned_host_id.slice(0, 8)) : '—';
 
     let extraInfo = '';
     if (status === 'SUCCESS' && t.exit_code !== null) extraInfo = `exit=${t.exit_code}`;
