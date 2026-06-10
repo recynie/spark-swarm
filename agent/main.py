@@ -16,6 +16,8 @@ app = typer.Typer(add_completion=False)
 
 
 def _detect_ip_address() -> str:
+    if settings.ip_address != "127.0.0.1":
+        return settings.ip_address
     try:
         return socket.gethostbyname(socket.gethostname())
     except OSError:

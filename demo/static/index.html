@@ -400,6 +400,7 @@ async function submitTask() {
 let lastTaskStatuses = {};
 let taskDetails = {};       // taskId → detail (with logs)
 let hostMap = {};           // hostId → hostname + ip
+let expandedLogs = new Set();
 
 async function fetchData() {
   try {
@@ -528,6 +529,16 @@ function renderTasks(tasks) {
       </div>`;
   }).join('');
 
+  // Re-expand logs that were open before re-render
+  expandedLogs.forEach(id => {
+    const el = document.getElementById('logs-' + id);
+    const btn = el?.previousElementSibling;
+    if (el && btn) {
+      el.classList.add('open');
+      btn.textContent = 'Hide Logs ▾';
+    }
+  });
+
   // Clear flash after animation
   if (Object.values(lastTaskStatuses).some(s => s)) {
     setTimeout(() => {
@@ -540,6 +551,8 @@ function toggleLogs(taskId) {
   const el = document.getElementById('logs-' + taskId);
   if (!el) return;
   const open = el.classList.toggle('open');
+  if (open) expandedLogs.add(taskId);
+  else expandedLogs.delete(taskId);
   const btn = el.previousElementSibling;
   btn.textContent = open ? 'Hide Logs ▾' : 'Show Logs ▸';
 }
