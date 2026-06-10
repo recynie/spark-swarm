@@ -62,6 +62,7 @@ def hosts() -> None:
 
 @app.command()
 def cancel(task_id: str) -> None:
+    """Cancel a PENDING task, or delete a completed (SUCCESS/FAILED/CANCELLED) task."""
     response = requests.delete(f"{_master_url()}/api/v1/tasks/{task_id}", timeout=10)
     response.raise_for_status()
     _print_json(response.json())
