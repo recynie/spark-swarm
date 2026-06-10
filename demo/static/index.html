@@ -528,9 +528,10 @@ function renderTasks(tasks) {
           </div>
           <span class="status-badge status-${status}">${status}</span>
         </div>
-        ${(t.stdout_log || t.stderr_log) ? `
+        ${(t.stdout_log || t.stderr_log || t.error_message) ? `
           <button class="logs-toggle" onclick="toggleLogs('${t.id}')">Show Logs ▸</button>
           <div class="logs-content" id="logs-${t.id}">
+            ${t.error_message ? `<div class="log-label">error</div><pre style="color:#ff6b6b">${esc(t.error_message)}</pre>` : ''}
             ${t.stdout_log ? `<div class="log-label">stdout</div><pre>${esc(t.stdout_log)}</pre>` : ''}
             ${t.stderr_log ? `<div class="log-label">stderr</div><pre>${esc(t.stderr_log)}</pre>` : ''}
           </div>
