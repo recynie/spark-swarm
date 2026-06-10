@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+import threading
 import time
 from pathlib import Path
 
@@ -48,6 +49,24 @@ def collect_resources() -> dict[str, float | int]:
     }
 
 
+def _start_task_heartbeat_loop(host_id: str) -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+
+    def _heartbeat_worker() -> None:
+        while not stop_event.wait(settings.poll_interval_seconds):
+            payload = {
+                "host_id": host_id,
+                "hostname": settings.hostname,
+                "ip_address": _detect_ip_address(),
+                **collect_resources(),
+            }
+            post_heartbeat(settings.master_url, payload)
+
+    thread = threading.Thread(target=_heartbeat_worker, daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
 def run_loop(iterations: int | None = None) -> None:
     remaining = iterations
     host_id = _load_host_id()
@@ -65,34 +84,39 @@ def run_loop(iterations: int | None = None) -> None:
             assigned_task = response.get("assigned_task")
             if assigned_task:
                 update_status(settings.master_url, assigned_task["id"], "BUILDING")
-                result = execute_task(assigned_task, settings.output_dir)
-                if result.error_message and result.exit_code is None:
-                    upload_result(
-                        settings.master_url,
-                        assigned_task["id"],
-                        {
-                            "status": result.status,
-                            "stdout_log": result.stdout_log,
-                            "stderr_log": result.stderr_log,
-                            "exit_code": result.exit_code,
-                            "error_message": result.error_message,
-                            "output_files": result.output_files,
-                        },
-                    )
-                else:
-                    update_status(settings.master_url, assigned_task["id"], "RUNNING")
-                    upload_result(
-                        settings.master_url,
-                        assigned_task["id"],
-                        {
-                            "status": result.status,
-                            "stdout_log": result.stdout_log,
-                            "stderr_log": result.stderr_log,
-                            "exit_code": result.exit_code,
-                            "error_message": result.error_message,
-                            "output_files": result.output_files,
-                        },
-                    )
+                task_heartbeat_stop, task_heartbeat_thread = _start_task_heartbeat_loop(host_id)
+                try:
+                    result = execute_task(assigned_task, settings.output_dir)
+                    if result.error_message and result.exit_code is None:
+                        upload_result(
+                            settings.master_url,
+                            assigned_task["id"],
+                            {
+                                "status": result.status,
+                                "stdout_log": result.stdout_log,
+                                "stderr_log": result.stderr_log,
+                                "exit_code": result.exit_code,
+                                "error_message": result.error_message,
+                                "output_files": result.output_files,
+                            },
+                        )
+                    else:
+                        update_status(settings.master_url, assigned_task["id"], "RUNNING")
+                        upload_result(
+                            settings.master_url,
+                            assigned_task["id"],
+                            {
+                                "status": result.status,
+                                "stdout_log": result.stdout_log,
+                                "stderr_log": result.stderr_log,
+                                "exit_code": result.exit_code,
+                                "error_message": result.error_message,
+                                "output_files": result.output_files,
+                            },
+                        )
+                finally:
+                    task_heartbeat_stop.set()
+                    task_heartbeat_thread.join(timeout=1)
         except Exception as exc:
             print(f"[{settings.hostname}] loop error: {exc}", flush=True)
         if remaining is not None:
