@@ -1,0 +1,9 @@
+FROM busybox
+
+CMD sh -c '\
+  echo "spark-swarm test task started"; \
+  date; \
+  echo "hello from spark-swarm" > /output/result.txt; \
+  uname -a > /output/system.txt; \
+  echo "spark-swarm test task finished"\
+'
