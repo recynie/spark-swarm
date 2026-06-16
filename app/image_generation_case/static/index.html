@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text-to-Image Swarm Studio</title>
+<style>
+* { box-sizing: border-box; }
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef2f6;
+  --line: #d7dee8;
+  --text: #17202a;
+  --muted: #667085;
+  --accent: #0b6f6a;
+  --accent-2: #305db8;
+  --accent-3: #b34c78;
+  --ink: #243044;
+  --ok: #11703d;
+  --warn: #9a6100;
+  --bad: #b3261e;
+  --pending: #56637a;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, Segoe UI, Arial, sans-serif; }
+button, input, select, textarea { font: inherit; }
+button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; min-height: 40px; padding: 9px 14px; cursor: pointer; font-weight: 700; }
+button.secondary { background: #fff; color: var(--accent); }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); padding: 9px 10px; }
+textarea { min-height: 132px; resize: vertical; line-height: 1.45; }
+label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+header { padding: 16px 22px; border-bottom: 1px solid var(--line); background: #fff; display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; box-shadow: 0 1px 0 rgba(17, 24, 39, .02); }
+.brand { display: grid; gap: 3px; }
+.brand h1 { margin: 0; font-size: 23px; letter-spacing: 0; }
+.brand p { margin: 0; color: var(--muted); }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.badge { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+.layout { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; min-height: 0; }
+.prompt-pane { border-right: 1px solid var(--line); background: #edf2f5; padding: 16px; overflow: auto; }
+.stage { padding: 16px 18px 36px; overflow: auto; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
+.panel-title { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fbfcfd; }
+.panel-title h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
+.panel-body { padding: 14px; display: grid; gap: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.thirds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mode { display: grid; grid-template-columns: repeat(2, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.mode button { border: 0; border-radius: 0; background: #fff; color: var(--ink); }
+.mode button.active { background: var(--ink); color: #fff; }
+.advanced { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
+.advanced summary { cursor: pointer; padding: 10px 12px; color: var(--ink); font-weight: 700; list-style-position: inside; }
+.advanced-grid { border-top: 1px solid var(--line); padding: 12px; display: grid; gap: 10px; background: #fbfcfb; }
+.hint, .sub { color: var(--muted); font-size: 13px; }
+.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-all; }
+.error-note { color: var(--bad); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.metric { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.metric strong { display: block; font-size: 22px; line-height: 1.1; }
+.run-hero { border: 1px solid #cbd7e6; border-radius: 8px; background: linear-gradient(135deg, #f8fbff, #f5f8f6); padding: 12px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.run-hero-main { display: grid; gap: 6px; min-width: min(100%, 460px); }
+.run-progress { min-width: 180px; display: grid; gap: 7px; }
+.progress-track { height: 8px; border-radius: 999px; background: #e3e8ef; overflow: hidden; }
+.progress-track span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s ease; }
+.final-set { display: grid; gap: 12px; }
+.final-head { border: 1px solid #c9d9d1; border-radius: 8px; background: #f6fbf8; padding: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+.final-head strong { font-size: 18px; }
+.result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.status { border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; width: max-content; }
+.SUCCESS, .COMPLETED, .ONLINE { background: #dff2e6; color: var(--ok); }
+.FAILED, .OFFLINE { background: #f9dedc; color: var(--bad); }
+.PENDING, .SCHEDULED { background: #e9edf4; color: var(--pending); }
+.BUILDING, .RUNNING, .SUBMITTED { background: #fff0d5; color: var(--warn); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.image-card { border: 1px solid var(--line); background: #fff; border-radius: 8px; overflow: hidden; min-width: 0; }
+.thumb { aspect-ratio: 1 / 1; background: #edf0ec; display: grid; place-items: center; overflow: hidden; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .empty { color: var(--muted); font-size: 13px; padding: 14px; text-align: center; }
+.image-body { padding: 10px; display: grid; gap: 6px; }
+.image-title { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.live-wall { display: grid; gap: 14px; }
+.branch-board { position: relative; display: grid; gap: 14px; }
+.branch-board::before { content: ""; position: absolute; left: 20px; top: 20px; bottom: 20px; width: 2px; background: #c8d3df; }
+.branch { position: relative; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 14px; padding-left: 42px; align-items: start; }
+.branch::before { content: ""; position: absolute; left: 20px; top: 28px; width: 28px; height: 2px; background: #c8d3df; }
+.branch.active .agent-card { border-color: #adc2df; box-shadow: 0 8px 24px rgba(34, 61, 96, .08); }
+.branch.saturated .agent-card { border-color: #e0b2c4; background: #fff8fb; }
+.branch-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; min-width: 0; }
+.branch-empty { min-height: 150px; border: 1px dashed #cfd8e3; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 16px; background: #f9fafb; }
+.queue-strip { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; display: grid; gap: 10px; }
+.queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.queue-chip { border: 1px solid #dce3eb; border-radius: 8px; padding: 9px; background: #fafbfc; display: grid; gap: 4px; min-width: 0; }
+.agent-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; display: grid; gap: 8px; align-self: start; }
+.agent-card.saturated { border-color: #e0b2c4; background: #fff8fb; }
+.resource { display: grid; gap: 5px; }
+.bar { height: 7px; border-radius: 999px; background: #e4e9e5; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent-2); width: 0; transition: width .25s ease; }
+.bar.mem span.high { background: var(--accent-3); }
+.bar.cpu span.high { background: var(--warn); }
+.timeline { display: grid; gap: 10px; }
+.timeline-item { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+.step-dot { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; font-size: 12px; color: var(--muted); }
+.message { margin-bottom: 12px; }
+.alert { border: 1px solid #dfc28a; background: #fff4dc; color: #7c5100; padding: 10px 12px; border-radius: 8px; }
+.alert.error { border-color: #e3a19c; background: #fde4e1; color: var(--bad); }
+.drawer { position: fixed; inset: 0; background: rgba(15, 20, 18, .38); display: none; z-index: 20; }
+.drawer.open { display: grid; place-items: stretch end; }
+.drawer-panel { width: min(680px, 100vw); height: 100%; background: #fff; border-left: 1px solid var(--line); padding: 16px; overflow: auto; display: grid; grid-template-rows: auto 1fr; gap: 12px; }
+.run-item { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; margin-bottom: 10px; background: #fff; }
+a { color: var(--accent); text-decoration: none; font-weight: 700; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  .prompt-pane { border-right: 0; border-bottom: 1px solid var(--line); }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .branch { grid-template-columns: 1fr; padding-left: 0; }
+  .branch-board::before, .branch::before { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand">
+      <h1>Text-to-Image Swarm Studio</h1>
+      <p>Generate image batches and watch distributed agents return images in real time.</p>
+    </div>
+    <div class="top-actions">
+      <span class="badge" id="master-badge">Master</span>
+      <span class="badge" id="model-badge">Model</span>
+      <button class="ghost" onclick="openHistory()">History</button>
+      <button class="secondary" onclick="refreshNow()">Refresh</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="prompt-pane">
+      <div class="panel">
+        <div class="panel-title"><h2>Create</h2><span class="sub" id="mode-label">Spark-Swarm</span></div>
+        <div class="panel-body">
+          <div class="mode">
+            <button id="mode-swarm" class="active" onclick="setMode('swarm')">Spark-Swarm</button>
+            <button id="mode-local" onclick="setMode('local')">Local Sequence</button>
+          </div>
+          <label>Prompt
+            <textarea id="prompt"></textarea>
+          </label>
+          <label>Negative Prompt
+            <textarea id="negative-prompt" style="min-height:74px"></textarea>
+          </label>
+          <div class="thirds">
+            <label>Images
+              <input id="image-count" type="number" min="1" max="24" step="1" value="12">
+            </label>
+            <label>Width
+              <input id="width" type="number" min="256" max="1280" step="64" value="768">
+            </label>
+            <label>Height
+              <input id="height" type="number" min="256" max="1280" step="64" value="768">
+            </label>
+          </div>
+          <details class="advanced" id="advanced-settings">
+            <summary>Advanced runtime</summary>
+            <div class="advanced-grid">
+              <div class="split">
+                <label>Steps
+                  <input id="steps" type="number" min="1" max="12" step="1" value="4">
+                </label>
+                <label>Seed Base
+                  <input id="seed-base" type="number" min="1" step="1" value="4200">
+                </label>
+              </div>
+              <div class="split">
+                <label>Model
+                  <input id="model-id" value="stabilityai/sd-turbo">
+                </label>
+                <label>Runtime Image
+                  <input id="base-image" value="python:3.11-slim">
+                </label>
+              </div>
+              <label id="master-field">Master URL
+                <input id="master-url" value="http://127.0.0.1:8000">
+              </label>
+              <label class="row" style="text-transform:none;letter-spacing:0;color:var(--text)">
+                <input id="deps-preinstalled" type="checkbox" style="width:auto">
+                Runtime image already contains AI dependencies
+              </label>
+            </div>
+          </details>
+          <button id="generate-btn" onclick="startGeneration()">Generate Batch</button>
+          <div class="hint" id="mode-hint">Spark-Swarm submits one task per image; live results appear under the agent that actually runs it.</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <main class="stage">
+      <div id="message" class="message"></div>
+      <div class="metrics">
+        <div class="metric"><strong id="asset-count">0</strong><span class="sub">Images ready</span></div>
+        <div class="metric"><strong id="task-count">0</strong><span class="sub">Total images</span></div>
+        <div class="metric"><strong id="online-hosts">0</strong><span class="sub">Online agents</span></div>
+        <div class="metric"><strong id="active-tasks">0</strong><span class="sub">Active images</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <h2 id="run-title">Current Generation</h2>
+          <span class="status PENDING" id="run-status">IDLE</span>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <span class="mono" id="run-id">No run selected</span>
+            <a id="gallery-link" href="#" target="_blank" style="display:none">Open Gallery</a>
+          </div>
+          <div class="run-hero">
+            <div class="run-hero-main">
+              <strong id="run-headline">Ready for a new batch</strong>
+              <div class="sub" id="run-prompt"></div>
+            </div>
+            <div class="run-progress">
+              <div class="row" style="justify-content:space-between"><span class="sub">Batch progress</span><span class="mono" id="progress-label">0 / 0</span></div>
+              <div class="progress-track"><span id="progress-fill"></span></div>
+            </div>
+          </div>
+          <div id="live-view"></div>
+          <div id="final-set"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h2>Performance</h2></div>
+        <div class="panel-body">
+          <div class="split">
+            <label>Swarm Run
+              <select id="swarm-run-select" onchange="renderLocalOptions()"></select>
+            </label>
+            <label>Local Run
+              <select id="local-run-select"></select>
+            </label>
+          </div>
+          <div class="row">
+            <button class="ghost" id="local-baseline-btn" onclick="startLocalMatch()">Run Local Match</button>
+            <button class="secondary" onclick="compareRuns()">Compare Runs</button>
+            <div id="benchmark-result" class="sub">Complete one swarm run and one local run to compare elapsed time.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h2>Agent Load</h2></div>
+        <div class="panel-body" id="agent-load"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="drawer" id="history-drawer" onclick="drawerBackdrop(event)">
+  <div class="drawer-panel">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <div class="brand"><h1 style="font-size:20px">History</h1><p>Previous image batches and generated galleries.</p></div>
+      </div>
+      <button class="ghost" onclick="closeHistory()">Close</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+let state = null;
+let activeRun = null;
+let activeBenchmark = null;
+let mode = 'swarm';
+let comparisonSwarmRunId = null;
+
+async function api(path, options = {}) {
+  const resp = await fetch(path, options);
+  if (!resp.ok) {
+    let message = resp.statusText;
+    try { message = (await resp.json()).detail || message; } catch (_) {}
+    throw new Error(message);
+  }
+  return resp.json();
+}
+
+function setMode(next) {
+  mode = next;
+  document.getElementById('mode-swarm').classList.toggle('active', mode === 'swarm');
+  document.getElementById('mode-local').classList.toggle('active', mode === 'local');
+  document.getElementById('mode-label').textContent = mode === 'swarm' ? 'Spark-Swarm' : 'Local Sequence';
+  document.getElementById('master-field').style.display = mode === 'swarm' ? 'grid' : 'none';
+  document.getElementById('mode-hint').textContent = mode === 'swarm'
+    ? 'Spark-Swarm submits one task per image; live results appear under the agent that actually runs it.'
+    : 'Local Sequence renders the same image batch one by one on this machine.';
+}
+
+function generationPayload() {
+  return {
+    master_url: document.getElementById('master-url').value.trim(),
+    model_id: document.getElementById('model-id').value.trim(),
+    base_image: document.getElementById('base-image').value.trim(),
+    deps_preinstalled: document.getElementById('deps-preinstalled').checked,
+    prompt: document.getElementById('prompt').value.trim(),
+    negative_prompt: document.getElementById('negative-prompt').value.trim(),
+    image_count: Number(document.getElementById('image-count').value || 12),
+    width: Number(document.getElementById('width').value || 768),
+    height: Number(document.getElementById('height').value || 768),
+    seed_base: Number(document.getElementById('seed-base').value || 4200),
+    steps: Number(document.getElementById('steps').value || 4),
+    enable_gpu: true
+  };
+}
+
+function activeRunPayload() {
+  if (!activeRun) return generationPayload();
+  const firstSpec = (activeRun.tasks || [])[0]?.spec || {};
+  return {
+    ...generationPayload(),
+    model_id: activeRun.model_id || document.getElementById('model-id').value.trim(),
+    base_image: activeRun.base_image || document.getElementById('base-image').value.trim(),
+    deps_preinstalled: Boolean(activeRun.deps_preinstalled),
+    prompt: activeRun.prompt || document.getElementById('prompt').value.trim(),
+    negative_prompt: activeRun.negative_prompt || document.getElementById('negative-prompt').value.trim(),
+    image_count: Number(activeRun.image_count || activeRun.tasks?.length || document.getElementById('image-count').value || 12),
+    width: Number(firstSpec.width || document.getElementById('width').value || 768),
+    height: Number(firstSpec.height || document.getElementById('height').value || 768),
+    seed_base: Number(firstSpec.seed ? firstSpec.seed - 1 : document.getElementById('seed-base').value || 4200),
+    steps: Number(firstSpec.steps || document.getElementById('steps').value || 4),
+    guidance_scale: Number(firstSpec.guidance_scale || 0),
+    enable_gpu: true
+  };
+}
+
+async function startGeneration() {
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  try {
+    const result = await api(mode === 'swarm' ? '/case/api/generate/swarm' : '/case/api/generate/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(generationPayload())
+    });
+    activeRun = result;
+    activeBenchmark = null;
+    showMessage(`${mode === 'swarm' ? 'Spark-Swarm' : 'Local'} generation started: ${result.run_id}`);
+    renderActiveRun();
+    await refreshNow();
+  } catch (e) {
+    showMessage(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function startLocalMatch() {
+  const btn = document.getElementById('local-baseline-btn');
+  btn.disabled = true;
+  try {
+    const sourceRunId = activeRun?.mode === 'swarm' ? activeRun.run_id : document.getElementById('swarm-run-select').value;
+    const result = await api('/case/api/generate/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(activeRunPayload())
+    });
+    comparisonSwarmRunId = sourceRunId || comparisonSwarmRunId;
+    activeRun = result;
+    activeBenchmark = null;
+    showMessage(`Local sequence started: ${result.run_id}`);
+    renderActiveRun();
+    await refreshNow();
+  } catch (e) {
+    showMessage(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function refreshNow() {
+  try {
+    state = await api('/case/api/state');
+    seedFormDefaults();
+    await refreshRunningRuns();
+    if (activeRun) {
+      const detail = await api(`/case/api/runs/${activeRun.run_id}`);
+      activeRun = detail.state || activeRun;
+      activeBenchmark = detail.benchmark || detail.state?.benchmark || null;
+    } else {
+      const defaultRun = defaultVisibleRun();
+      if (defaultRun) {
+        const detail = await api(`/case/api/runs/${defaultRun.run_id}`);
+        activeRun = detail.state;
+        activeBenchmark = detail.benchmark || detail.state?.benchmark || null;
+      }
+    }
+    renderShell();
+  } catch (e) {
+    showMessage(e.message, true);
+  }
+}
+
+function defaultVisibleRun() {
+  const runs = state?.runs || [];
+  const activeStatuses = ['SUBMITTED','PENDING','BUILDING','RUNNING'];
+  return runs.find(r => r.type === 'swarm' && activeStatuses.includes(r.status) && !r.stale)
+    || runs.find(r => r.type === 'swarm' && Number(r.assets_count || 0) > 0)
+    || runs.find(r => activeStatuses.includes(r.status) && !r.stale)
+    || runs.find(r => Number(r.assets_count || 0) > 0)
+    || runs[0];
+}
+
+async function refreshRunningRuns() {
+  const runs = (state?.runs || []).filter(r => ['SUBMITTED','PENDING','BUILDING','RUNNING'].includes(r.status));
+  for (const run of runs) {
+    try { await api(`/case/api/runs/${run.run_id}/refresh`, { method: 'POST' }); } catch (_) {}
+  }
+  state = await api('/case/api/state');
+}
+
+function seedFormDefaults() {
+  if (!state) return;
+  if (!document.getElementById('prompt').value) document.getElementById('prompt').value = state.default_prompt || '';
+  if (!document.getElementById('negative-prompt').value) document.getElementById('negative-prompt').value = state.default_negative_prompt || '';
+  document.getElementById('master-url').value = state.master_url || 'http://127.0.0.1:8000';
+  document.getElementById('model-id').value = state.model_id || 'stabilityai/sd-turbo';
+  document.getElementById('base-image').value = state.base_image || 'python:3.11-slim';
+  document.getElementById('deps-preinstalled').checked = Boolean(state.deps_preinstalled);
+}
+
+function renderShell() {
+  document.getElementById('master-badge').textContent = state.master_ok ? 'Master online' : 'Master unavailable';
+  document.getElementById('model-badge').textContent = state.model_id || 'Model';
+  renderSelectors();
+  renderActiveRun();
+  renderAgentLoad();
+  renderHistoryList();
+}
+
+function renderSelectors() {
+  const runs = state.runs || [];
+  const swarm = runs.filter(r => r.type === 'swarm' && r.status === 'COMPLETED' && r.swarm_elapsed_seconds);
+  const swarmSelect = document.getElementById('swarm-run-select');
+  const previousSwarm = comparisonSwarmRunId || swarmSelect.value;
+  swarmSelect.innerHTML = optionList(swarm);
+  if (swarm.some(r => r.run_id === previousSwarm)) swarmSelect.value = previousSwarm;
+  renderLocalOptions();
+  if (!swarm.length || !compatibleLocalRuns().length) {
+    document.getElementById('benchmark-result').textContent = 'Complete one comparable Spark-Swarm run and one local run to calculate speedup.';
+  }
+}
+
+function renderLocalOptions() {
+  const local = compatibleLocalRuns();
+  const select = document.getElementById('local-run-select');
+  const previous = select.value;
+  select.innerHTML = optionList(local);
+  if (local.some(r => r.run_id === previous)) select.value = previous;
+}
+
+function compatibleLocalRuns() {
+  const runs = state?.runs || [];
+  const local = runs.filter(r => r.type === 'local' && r.status === 'COMPLETED' && r.local_elapsed_seconds);
+  const swarmId = document.getElementById('swarm-run-select').value;
+  const swarmRun = runs.find(r => r.run_id === swarmId);
+  if (!swarmRun?.comparison_key) return local;
+  return local.filter(r => r.comparison_key === swarmRun.comparison_key);
+}
+
+function optionList(runs) {
+  if (!runs.length) return '<option value="">No completed runs</option>';
+  return runs.map(r => `<option value="${esc(r.run_id)}">${esc(runLabel(r, 42))}</option>`).join('');
+}
+
+function renderActiveRun() {
+  const run = activeRun;
+  const assets = run?.assets || [];
+  const tasks = run?.tasks || [];
+  const total = run?.image_count || tasks.length || 0;
+  document.getElementById('asset-count').textContent = assets.length;
+  document.getElementById('task-count').textContent = total;
+  document.getElementById('online-hosts').textContent = currentHosts().filter(h => h.status === 'ONLINE').length;
+  document.getElementById('active-tasks').textContent = tasks.filter(t => ['BUILDING','RUNNING'].includes(t.task?.status)).length;
+  document.getElementById('run-title').textContent = run ? (run.mode === 'local' ? 'Local Sequence' : 'Live Multi-Agent Results') : 'Current Generation';
+  document.getElementById('run-id').textContent = run ? run.run_id : 'No run selected';
+  document.getElementById('run-headline').textContent = run ? `${assets.length} of ${total} images ready` : 'Ready for a new batch';
+  document.getElementById('run-prompt').textContent = run?.prompt || '';
+  document.getElementById('progress-label').textContent = `${assets.length} / ${total}`;
+  document.getElementById('progress-fill').style.width = `${total ? Math.min(100, assets.length / total * 100) : 0}%`;
+  const status = document.getElementById('run-status');
+  status.textContent = run?.status || 'IDLE';
+  status.className = `status ${run?.status || 'PENDING'}`;
+  const gallery = document.getElementById('gallery-link');
+  gallery.style.display = run?.gallery ? 'inline' : 'none';
+  if (run?.gallery) gallery.href = `/runs/${escAttr(run.run_id)}/${escAttr(run.gallery)}`;
+  document.getElementById('final-set').innerHTML = finalSetMarkup(run);
+  const live = document.getElementById('live-view');
+  if (!run) {
+    live.innerHTML = '<div class="sub">Enter a prompt and start a batch to see images appear here.</div>';
+    return;
+  }
+  live.innerHTML = run.mode === 'local' ? localTimeline(run) : swarmBranches(run);
+}
+
+function finalSetMarkup(run) {
+  if (!run || !['COMPLETED', 'FAILED'].includes(run.status)) return '';
+  const assets = run.assets || [];
+  const elapsed = run.mode === 'swarm'
+    ? run.swarm_metrics?.elapsed_seconds
+    : run.local_metrics?.elapsed_seconds;
+  const completeText = run.status === 'COMPLETED'
+    ? `${assets.length} images generated`
+    : `${assets.length} images recovered before failure`;
+  return `<div class="final-set">
+    <div class="final-head">
+      <div><strong>Final Set</strong><div class="sub">${esc(completeText)}${elapsed ? ` · ${fmtSec(elapsed)}` : ''}</div></div>
+      <div class="row">${run.gallery ? `<a href="/runs/${escAttr(run.run_id)}/${escAttr(run.gallery)}" target="_blank">Open Gallery</a>` : ''}</div>
+    </div>
+    ${run.status === 'FAILED' && run.error ? `<div class="alert error">${esc(shortPrompt(run.error, 220))}</div>` : ''}
+    ${benchmarkMarkup(activeBenchmark)}
+    ${assets.length ? `<div class="result-grid">${assets.map(asset => resultCard(asset, run)).join('')}</div>` : '<div class="sub">No images were collected for this run.</div>'}
+  </div>`;
+}
+
+function benchmarkMarkup(benchmark) {
+  const comparison = benchmark?.comparison;
+  if (!comparison) return '';
+  return `<div class="final-head">
+    <div><strong>${comparison.speedup.toFixed(2)}x faster with Spark-Swarm</strong><div class="sub">Saved ${fmtSec(comparison.saved_seconds)} across the same prompt set</div></div>
+    <div class="mono">Swarm ${fmtSec(comparison.swarm_elapsed_seconds)} · Local ${fmtSec(comparison.local_elapsed_seconds)}</div>
+  </div>`;
+}
+
+function resultCard(asset, run) {
+  const src = `/runs/${escAttr(run.run_id)}/${escAttr(asset.image)}`;
+  return `<div class="image-card">
+    <div class="thumb"><img src="${src}" alt="${escAttr(asset.title)}"></div>
+    <div class="image-body">
+      <div class="image-title">${esc(asset.title || asset.creative_name)}</div>
+      <div class="mono">seed ${esc(asset.seed || '')} · ${esc(asset.size || '')}</div>
+      <div class="sub">${fmtSec(asset.elapsed_seconds)} · ${esc(asset.device || '')}</div>
+    </div>
+  </div>`;
+}
+
+function swarmBranches(run) {
+  const hosts = currentHosts();
+  const columns = [];
+  const assignedIds = new Set();
+  const pending = [];
+  for (const item of run.tasks || []) {
+    const task = item.task || {};
+    if (!task.assigned_host_id || taskStatus(item) === 'PENDING') {
+      pending.push(item);
+      continue;
+    }
+    assignedIds.add(task.assigned_host_id);
+  }
+  for (const host of hosts) {
+    columns.push({
+      host,
+      items: (run.tasks || []).filter(item => item.task?.assigned_host_id === host.id && taskStatus(item) !== 'PENDING')
+    });
+  }
+  for (const hostId of assignedIds) {
+    if (hosts.some(host => host.id === hostId)) continue;
+    columns.push({
+      host: { id: hostId, hostname: hostId.slice(0, 12), ip_address: 'unknown', status: 'OFFLINE' },
+      items: (run.tasks || []).filter(item => item.task?.assigned_host_id === hostId)
+    });
+  }
+  const visibleColumns = columns.filter(column => column.items.length || column.host.status === 'ONLINE');
+  return `<div class="live-wall">
+    <div class="branch-board">${visibleColumns.map(column => branchMarkup(column.host, column.items, run)).join('')}</div>
+    ${pending.length ? pendingQueueMarkup(pending, run) : ''}
+  </div>`;
+}
+
+function branchMarkup(host, items, run) {
+  const phase = agentPhase(host, items);
+  const counts = statusCounts(items);
+  const active = items.some(item => ['BUILDING','RUNNING','SCHEDULED'].includes(taskStatus(item)));
+  const saturated = isResourceTight(host);
+  return `<div class="branch ${active ? 'active' : ''} ${saturated ? 'saturated' : ''}">
+    <div class="agent-card">
+      <div class="row"><span class="image-title">${esc(host.hostname)}</span><span class="status ${phase.status}">${esc(phase.label)}</span></div>
+      <div class="mono">${esc(host.ip_address)} · ${esc(host.status)}</div>
+      <div class="sub">${esc(agentSummary(counts, host))}</div>
+      ${resourceBars(host)}
+    </div>
+    <div class="branch-images">${items.length ? items.map(item => imageCard(item, run)).join('') : '<div class="branch-empty">No images assigned to this agent in the selected run.</div>'}</div>
+  </div>`;
+}
+
+function pendingQueueMarkup(items, run) {
+  return `<div class="queue-strip">
+    <div class="row" style="justify-content:space-between"><strong>Waiting For Capacity</strong><span class="status PENDING">${items.length} queued</span></div>
+    <div class="queue-grid">${items.map(item => `<div class="queue-chip">
+      <strong>${esc(item.spec?.title || item.creative_name)}</strong>
+      <span class="mono">${esc(item.creative_name)} · seed ${esc(item.spec?.seed || '')}</span>
+      ${imagePendingText(taskStatus(item), taskError(item))}
+    </div>`).join('')}</div>
+  </div>`;
+}
+
+function localTimeline(run) {
+  return `<div class="timeline">${(run.tasks || []).map((item, index) => `<div class="timeline-item">
+    <div class="step-dot">${index + 1}</div>
+    ${imageCard(item, run)}
+  </div>`).join('')}</div>`;
+}
+
+function imageCard(item, run) {
+  const asset = (run.assets || []).find(a => a.creative_name === item.creative_name);
+  const status = item.task?.status || 'PENDING';
+  const src = asset ? `/runs/${escAttr(run.run_id)}/${escAttr(asset.image)}` : '';
+  const error = taskError(item);
+  return `<div class="image-card">
+    <div class="thumb">${asset ? `<img src="${src}" alt="${escAttr(asset.title)}">` : `<div class="empty">${esc(status)}</div>`}</div>
+    <div class="image-body">
+      <div class="row"><span class="image-title">${esc(item.spec?.title || item.creative_name)}</span><span class="status ${status}">${esc(status)}</span></div>
+      <div class="mono">${esc(item.creative_name)} · seed ${esc(item.spec?.seed || asset?.seed || '')}</div>
+      ${asset ? `<div class="sub">${fmtSec(asset.elapsed_seconds)} · ${esc(asset.device || '')}</div>` : imagePendingText(status, error)}
+    </div>
+  </div>`;
+}
+
+function imagePendingText(status, error) {
+  if (error) return `<div class="error-note" title="${escAttr(error)}">${esc(shortPrompt(error, 180))}</div>`;
+  if (status === 'PENDING') return '<div class="sub">Waiting in master scheduler queue</div>';
+  if (status === 'SCHEDULED') return '<div class="sub">Master assigned an agent; waiting for pickup</div>';
+  if (status === 'BUILDING') return '<div class="sub">Agent is building the task container</div>';
+  if (status === 'RUNNING') return '<div class="sub">Agent is rendering this image</div>';
+  return ['FAILED','CANCELLED'].includes(status) ? '<div class="sub">No image output collected</div>' : '<div class="sub">Waiting for image output</div>';
+}
+
+function taskError(item) {
+  return item.task?.error_message || item.task?.stderr_log || item.task?.stdout_log || '';
+}
+
+function statusCounts(items) {
+  const counts = { SUCCESS: 0, FAILED: 0, running: 0, scheduled: 0, pending: 0 };
+  for (const item of items) {
+    const status = taskStatus(item);
+    if (status === 'SUCCESS') counts.SUCCESS += 1;
+    else if (['FAILED','CANCELLED'].includes(status)) counts.FAILED += 1;
+    else if (['BUILDING','RUNNING'].includes(status)) counts.running += 1;
+    else if (status === 'SCHEDULED') counts.scheduled += 1;
+    else counts.pending += 1;
+  }
+  return counts;
+}
+
+function taskStatus(item) {
+  return item.task?.status || 'PENDING';
+}
+
+function agentPhase(host, items) {
+  const statuses = items.map(taskStatus);
+  if (host.status !== 'ONLINE') return { status: 'OFFLINE', label: 'Offline' };
+  if (statuses.some(status => ['BUILDING','RUNNING'].includes(status))) return { status: 'RUNNING', label: 'Rendering' };
+  if (statuses.some(status => status === 'SCHEDULED')) return { status: 'SCHEDULED', label: 'Assigned' };
+  if (statuses.length && statuses.every(status => status === 'SUCCESS')) return { status: 'SUCCESS', label: 'Complete' };
+  if (statuses.some(status => ['FAILED','CANCELLED'].includes(status))) return { status: 'FAILED', label: 'Attention' };
+  return isResourceTight(host) ? { status: 'SCHEDULED', label: 'Busy' } : { status: 'ONLINE', label: 'Available' };
+}
+
+function agentSummary(counts, host) {
+  const parts = [];
+  if (counts.SUCCESS) parts.push(`${counts.SUCCESS} ready`);
+  if (counts.running) parts.push(`${counts.running} running`);
+  if (counts.scheduled) parts.push(`${counts.scheduled} assigned`);
+  if (counts.FAILED) parts.push(`${counts.FAILED} failed`);
+  if (!parts.length && isResourceTight(host)) parts.push('high load, unlikely to receive this batch');
+  return parts.length ? parts.join(' · ') : 'available for new work';
+}
+
+function renderAgentLoad() {
+  const el = document.getElementById('agent-load');
+  const hosts = currentHosts();
+  if (!hosts.length) {
+    el.innerHTML = '<div class="sub">No agents connected to the configured master.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="grid">${hosts.map(hostCard).join('')}</div>`;
+}
+
+function hostCard(h) {
+  const tight = isResourceTight(h);
+  return `<div class="agent-card ${tight ? 'saturated' : ''}">
+    <div class="row"><span class="image-title">${esc(h.hostname)}</span><span class="status ${h.status}">${esc(h.status)}</span></div>
+    <div class="mono">${esc(h.ip_address)}</div>
+    <div class="sub">${esc(tight ? 'High load or low memory; scheduler should avoid memory-heavy image tasks.' : 'Capacity available for image tasks.')}</div>
+    ${resourceBars(h)}
+  </div>`;
+}
+
+function resourceBars(h) {
+  const cpuUsed = Math.max(0, Number(h.cpu_total || 0) - Number(h.cpu_available || 0));
+  const cpuPct = h.cpu_total ? cpuUsed / Number(h.cpu_total) * 100 : 0;
+  const memUsed = Math.max(0, Number(h.memory_total_mb || 0) - Number(h.memory_available_mb || 0));
+  const memPct = h.memory_total_mb ? memUsed / Number(h.memory_total_mb) * 100 : 0;
+  return `<div class="resource">
+    <div class="row" style="justify-content:space-between"><span class="sub">CPU</span><span class="mono">${cpuUsed.toFixed(1)} / ${h.cpu_total}</span></div>
+    <div class="bar cpu"><span class="${cpuPct > 80 ? 'high' : ''}" style="width:${Math.min(100, cpuPct)}%"></span></div>
+    <div class="row" style="justify-content:space-between"><span class="sub">Memory</span><span class="mono">${fmtMb(memUsed)} / ${fmtMb(h.memory_total_mb)}</span></div>
+    <div class="bar mem"><span class="${memPct > 80 ? 'high' : ''}" style="width:${Math.min(100, memPct)}%"></span></div>
+  </div>`;
+}
+
+function currentHosts() {
+  const byKey = new Map();
+  for (const host of state?.hosts || []) {
+    const key = host.ip_address || host.hostname || host.id;
+    const previous = byKey.get(key);
+    if (!previous || hostTime(host) > hostTime(previous)) byKey.set(key, host);
+  }
+  return Array.from(byKey.values()).sort((a, b) => hostSortName(a).localeCompare(hostSortName(b), undefined, { numeric: true }));
+}
+
+function hostTime(host) {
+  const value = Date.parse(host.last_heartbeat || '');
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hostSortName(host) {
+  return `${host.hostname || ''}-${host.ip_address || ''}`;
+}
+
+function isResourceTight(host) {
+  const memoryAvailable = Number(host.memory_available_mb || 0);
+  const memoryTotal = Number(host.memory_total_mb || 0);
+  const cpuAvailable = Number(host.cpu_available || 0);
+  const memPct = memoryTotal ? (memoryTotal - memoryAvailable) / memoryTotal * 100 : 0;
+  return host.status === 'ONLINE' && (memoryAvailable < 16384 || memPct > 88 || cpuAvailable < 4);
+}
+
+async function compareRuns() {
+  const swarm = document.getElementById('swarm-run-select').value;
+  const local = document.getElementById('local-run-select').value;
+  if (!swarm || !local) { showMessage('Choose one swarm run and one local run.', true); return; }
+  try {
+    const result = await api('/case/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ swarm_run_id: swarm, local_run_id: local })
+    });
+    activeBenchmark = result;
+    renderBenchmark(result);
+    const detail = await api(`/case/api/runs/${swarm}`);
+    activeRun = detail.state;
+    activeBenchmark = detail.benchmark || result;
+    await refreshNow();
+  } catch (e) {
+    showMessage(e.message, true);
+  }
+}
+
+function renderBenchmark(result) {
+  const el = document.getElementById('benchmark-result');
+  const c = result.comparison;
+  if (!c) {
+    el.innerHTML = '<div class="alert">Benchmark needs completed local and swarm measurements.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="metric"><strong>${c.speedup.toFixed(2)}x</strong><span class="sub">Spark-Swarm speedup</span></div>
+    <div class="sub">Local ${fmtSec(c.local_elapsed_seconds)} · Swarm ${fmtSec(c.swarm_elapsed_seconds)} · Saved ${fmtSec(c.saved_seconds)}</div>`;
+}
+
+function openHistory() {
+  document.getElementById('history-drawer').classList.add('open');
+  renderHistoryList();
+}
+function closeHistory() { document.getElementById('history-drawer').classList.remove('open'); }
+function drawerBackdrop(event) { if (event.target.id === 'history-drawer') closeHistory(); }
+
+function renderHistoryList() {
+  const el = document.getElementById('history-list');
+  if (!el || !state) return;
+  const runs = state.runs || [];
+  if (!runs.length) { el.innerHTML = '<div class="sub">No history yet.</div>'; return; }
+  el.innerHTML = runs.map(r => `<div class="run-item">
+    <div class="row"><span class="image-title">${esc(runLabel(r, 76))}</span><span class="status ${r.status}">${esc(r.status)}</span></div>
+    <div class="mono">${esc(r.run_id)} · ${esc(r.type)} · ${esc(String(r.assets_count || 0))}/${esc(String(r.image_count || 0))} images</div>
+    <div class="row">
+      <button class="secondary" onclick="loadRun('${escAttr(r.run_id)}')">Open</button>
+      ${r.gallery ? `<a href="/runs/${escAttr(r.run_id)}/campaign-gallery.html" target="_blank">Gallery</a>` : ''}
+    </div>
+  </div>`).join('');
+}
+
+async function loadRun(runId) {
+  const detail = await api(`/case/api/runs/${runId}`);
+  activeRun = detail.state;
+  activeBenchmark = detail.benchmark || null;
+  closeHistory();
+  renderActiveRun();
+}
+
+function showMessage(message, error = false) {
+  document.getElementById('message').innerHTML = `<div class="alert ${error ? 'error' : ''}">${esc(message)}</div>`;
+}
+function esc(value) {
+  const div = document.createElement('div');
+  div.textContent = value == null ? '' : String(value);
+  return div.innerHTML;
+}
+function escAttr(value) { return esc(value).replace(/"/g, '&quot;'); }
+function shortPrompt(value, len) {
+  const text = String(value || '');
+  return text.length > len ? `${text.slice(0, len - 1)}...` : text;
+}
+function runLabel(run, len) {
+  const base = run.prompt || run.campaign_name || run.run_id;
+  const suffix = run.run_id ? ` · ${run.run_id.slice(-13)}` : '';
+  return shortPrompt(`${base}${suffix}`, len);
+}
+function fmtMb(mb) {
+  const n = Number(mb || 0);
+  return n >= 1024 ? `${(n / 1024).toFixed(1)} GB` : `${Math.round(n)} MB`;
+}
+function fmtSec(seconds) {
+  const n = Number(seconds || 0);
+  return `${n.toFixed(1)}s`;
+}
+
+setMode('swarm');
+refreshNow();
+setInterval(refreshNow, 2500);
+</script>
+</body>
+</html>

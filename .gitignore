@@ -15,6 +15,13 @@ venv/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+.agents/
+.claude/
+skills-lock.json
+node_modules/
 
 # Local runtime data
 *.db
+.spark-swarm-agent-id
+agent-output/
+spark_swarm_artifacts/

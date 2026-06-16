@@ -7,13 +7,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from master.config import settings
 from master.database import Base, get_db
 from master.main import app
 
 
 @pytest.fixture()
-def client(tmp_path) -> Generator[TestClient, None, None]:
+def client(tmp_path, monkeypatch) -> Generator[TestClient, None, None]:
     db_path = tmp_path / "test.db"
+    monkeypatch.setattr(settings, "artifact_dir", str(tmp_path / "artifacts"))
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
     Base.metadata.create_all(bind=engine)

@@ -4,9 +4,11 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from master.artifacts import artifact_urls, safe_artifact_path
 from master.database import get_db
 from master.models import Task, TaskStatus
 from master.schemas import TaskCreate, TaskDetail, TaskSummary
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 def _to_detail(task: Task) -> TaskDetail:
+    output_files = json.loads(task.output_files_json or "[]")
     return TaskDetail(
         id=task.id,
         name=task.name,
@@ -33,7 +36,8 @@ def _to_detail(task: Task) -> TaskDetail:
         stderr_log=task.stderr_log,
         exit_code=task.exit_code,
         error_message=task.error_message,
-        output_files=json.loads(task.output_files_json or "[]"),
+        output_files=output_files,
+        artifact_urls=artifact_urls(task.id, output_files),
     )
 
 
@@ -72,6 +76,17 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return _to_detail(task)
+
+
+@router.get("/{task_id}/artifacts/{artifact_path:path}")
+def get_task_artifact(task_id: str, artifact_path: str, db: Session = Depends(get_db)):
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    path = safe_artifact_path(task_id, artifact_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return FileResponse(path)
 
 
 _DELETABLE_STATUSES = {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED}

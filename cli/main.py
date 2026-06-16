@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import requests
 import typer
 
 app = typer.Typer(add_completion=False)
+DEFAULT_MASTER_URL = "http://127.0.0.1:8000"
 
 
-def _master_url() -> str:
-    return "http://127.0.0.1:8000"
+def _master_url(master_url: str | None = None) -> str:
+    return (master_url or os.environ.get("SPARK_SWARM_MASTER_URL") or DEFAULT_MASTER_URL).rstrip("/")
 
 
 def _print_json(payload) -> None:
@@ -25,6 +27,7 @@ def submit(
     memory: int | None = typer.Option(default=None),
     timeout: int | None = typer.Option(default=None),
     priority: int = typer.Option(default=10),
+    master_url: str | None = typer.Option(default=None),
 ) -> None:
     payload = {
         "name": name,
@@ -34,43 +37,43 @@ def submit(
         "timeout_seconds": timeout,
         "priority": priority,
     }
-    response = requests.post(f"{_master_url()}/api/v1/tasks", json=payload, timeout=10)
+    response = requests.post(f"{_master_url(master_url)}/api/v1/tasks", json=payload, timeout=10)
     response.raise_for_status()
     _print_json(response.json())
 
 
 @app.command()
-def status(task_id: str) -> None:
-    response = requests.get(f"{_master_url()}/api/v1/tasks/{task_id}", timeout=10)
+def status(task_id: str, master_url: str | None = typer.Option(default=None)) -> None:
+    response = requests.get(f"{_master_url(master_url)}/api/v1/tasks/{task_id}", timeout=10)
     response.raise_for_status()
     _print_json(response.json())
 
 
 @app.command("tasks")
-def list_tasks(status: str | None = typer.Option(default=None)) -> None:
-    response = requests.get(f"{_master_url()}/api/v1/tasks", params={"status": status} if status else None, timeout=10)
+def list_tasks(status: str | None = typer.Option(default=None), master_url: str | None = typer.Option(default=None)) -> None:
+    response = requests.get(f"{_master_url(master_url)}/api/v1/tasks", params={"status": status} if status else None, timeout=10)
     response.raise_for_status()
     _print_json(response.json())
 
 
 @app.command()
-def hosts() -> None:
-    response = requests.get(f"{_master_url()}/api/v1/hosts", timeout=10)
+def hosts(master_url: str | None = typer.Option(default=None)) -> None:
+    response = requests.get(f"{_master_url(master_url)}/api/v1/hosts", timeout=10)
     response.raise_for_status()
     _print_json(response.json())
 
 
 @app.command()
-def cancel(task_id: str) -> None:
+def cancel(task_id: str, master_url: str | None = typer.Option(default=None)) -> None:
     """Cancel a PENDING task, or delete a completed (SUCCESS/FAILED/CANCELLED) task."""
-    response = requests.delete(f"{_master_url()}/api/v1/tasks/{task_id}", timeout=10)
+    response = requests.delete(f"{_master_url(master_url)}/api/v1/tasks/{task_id}", timeout=10)
     response.raise_for_status()
     _print_json(response.json())
 
 
 @app.command()
-def logs(task_id: str) -> None:
-    response = requests.get(f"{_master_url()}/api/v1/tasks/{task_id}", timeout=10)
+def logs(task_id: str, master_url: str | None = typer.Option(default=None)) -> None:
+    response = requests.get(f"{_master_url(master_url)}/api/v1/tasks/{task_id}", timeout=10)
     response.raise_for_status()
     payload = response.json()
     typer.echo(payload.get("stdout_log") or "")

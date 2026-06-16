@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import json
 import socket
 import threading
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 import psutil
 import typer
 
 from agent.config import settings
-from agent.executor import execute_task
+from agent.executor import ExecutionResult, execute_task
 from agent.reporter import post_heartbeat, update_status, upload_result
 
 app = typer.Typer(add_completion=False)
@@ -73,6 +73,18 @@ def _start_task_heartbeat_loop(host_id: str) -> tuple[threading.Event, threading
     return stop_event, thread
 
 
+def _result_payload(result: ExecutionResult) -> dict:
+    return {
+        "status": result.status,
+        "stdout_log": result.stdout_log,
+        "stderr_log": result.stderr_log,
+        "exit_code": result.exit_code,
+        "error_message": result.error_message,
+        "output_files": result.output_files,
+        "artifacts": [asdict(artifact) for artifact in result.artifacts],
+    }
+
+
 def run_loop(iterations: int | None = None) -> None:
     remaining = iterations
     host_id = _load_host_id()
@@ -92,34 +104,18 @@ def run_loop(iterations: int | None = None) -> None:
                 update_status(settings.master_url, assigned_task["id"], "BUILDING")
                 task_heartbeat_stop, task_heartbeat_thread = _start_task_heartbeat_loop(host_id)
                 try:
-                    result = execute_task(assigned_task, settings.output_dir)
+                    result = execute_task(
+                        assigned_task,
+                        settings.output_dir,
+                        enable_gpu=settings.enable_gpu,
+                        model_cache_dir=settings.model_cache_dir,
+                        max_artifact_bytes=settings.max_artifact_bytes,
+                    )
                     if result.error_message and result.exit_code is None:
-                        upload_result(
-                            settings.master_url,
-                            assigned_task["id"],
-                            {
-                                "status": result.status,
-                                "stdout_log": result.stdout_log,
-                                "stderr_log": result.stderr_log,
-                                "exit_code": result.exit_code,
-                                "error_message": result.error_message,
-                                "output_files": result.output_files,
-                            },
-                        )
+                        upload_result(settings.master_url, assigned_task["id"], _result_payload(result))
                     else:
                         update_status(settings.master_url, assigned_task["id"], "RUNNING")
-                        upload_result(
-                            settings.master_url,
-                            assigned_task["id"],
-                            {
-                                "status": result.status,
-                                "stdout_log": result.stdout_log,
-                                "stderr_log": result.stderr_log,
-                                "exit_code": result.exit_code,
-                                "error_message": result.error_message,
-                                "output_files": result.output_files,
-                            },
-                        )
+                        upload_result(settings.master_url, assigned_task["id"], _result_payload(result))
                 finally:
                     task_heartbeat_stop.set()
                     task_heartbeat_thread.join(timeout=1)
