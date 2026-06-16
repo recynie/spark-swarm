@@ -14,6 +14,9 @@ class AgentSettings(BaseSettings):
     ip_address: str = "127.0.0.1"
     host_id_file: str = str(Path(".spark-swarm-agent-id").absolute())
     output_dir: str = str(Path("./agent-output").absolute())
+    enable_gpu: bool = False
+    model_cache_dir: str | None = None
+    max_artifact_bytes: int = 100 * 1024 * 1024
 
 
 settings = AgentSettings()

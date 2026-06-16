@@ -41,6 +41,12 @@ class TaskDetail(TaskSummary):
     exit_code: int | None
     error_message: str | None
     output_files: list[str] = Field(default_factory=list)
+    artifact_urls: dict[str, str] = Field(default_factory=dict)
+
+
+class OutputArtifact(BaseModel):
+    path: str
+    content_base64: str
 
 
 class TaskResultUpdate(BaseModel):
@@ -50,6 +56,7 @@ class TaskResultUpdate(BaseModel):
     exit_code: int | None = None
     error_message: str | None = None
     output_files: list[str] = Field(default_factory=list)
+    artifacts: list[OutputArtifact] = Field(default_factory=list)
 
 
 class TaskStatusUpdate(BaseModel):

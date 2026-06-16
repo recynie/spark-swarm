@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "spark-swarm-master"
     api_prefix: str = "/api/v1"
     database_url: str = Field(default=f"sqlite:///{Path('spark_swarm.db').absolute()}")
+    artifact_dir: str = Field(default=str(Path("spark_swarm_artifacts").absolute()))
     scheduler_interval_seconds: int = 5
     heartbeat_interval_seconds: int = 5
     heartbeat_timeout_seconds: int = 15

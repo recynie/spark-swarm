@@ -42,7 +42,7 @@ uv sync --extra test
 
 - **Master** 是唯一的调度中心，所有 agent 和 CLI 都连接到它。
 - **Agent** 运行在每台 worker 机器上，定期心跳并领取任务。
-- **CLI** 在任意能访问 master 的机器上运行（当前版本默认连接 `127.0.0.1:8000`，建议在 master 机器上执行）。
+- **CLI** 在任意能访问 master 的机器上运行，默认连接 `127.0.0.1:8000`，也可以通过 `--master-url` 或 `SPARK_SWARM_MASTER_URL` 指定远程 master。
 
 ---
 
@@ -76,6 +76,7 @@ curl http://<master-ip>:8000/healthz
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
 | `SPARK_SWARM_DATABASE_URL` | `sqlite:///$(pwd)/spark_swarm.db` | 数据库连接串 |
+| `SPARK_SWARM_ARTIFACT_DIR` | `$(pwd)/spark_swarm_artifacts` | master 保存任务产物的目录 |
 | `SPARK_SWARM_SCHEDULER_INTERVAL_SECONDS` | `5` | 调度循环间隔（秒） |
 | `SPARK_SWARM_HEARTBEAT_TIMEOUT_SECONDS` | `15` | agent 离线判定超时（秒） |
 
@@ -153,6 +154,9 @@ uv run python -m agent.main
 | `SPARK_SWARM_AGENT_IP_ADDRESS` | `127.0.0.1` | 上报给 master 的 IP（自动探测） |
 | `SPARK_SWARM_AGENT_HOST_ID_FILE` | `./.spark-swarm-agent-id` | host_id 持久化文件路径 |
 | `SPARK_SWARM_AGENT_OUTPUT_DIR` | `./agent-output` | 任务产物输出目录 |
+| `SPARK_SWARM_AGENT_ENABLE_GPU` | `false` | 为任务容器挂载全部 GPU |
+| `SPARK_SWARM_AGENT_MODEL_CACHE_DIR` | 空 | 挂载到任务容器 `/models` 的模型缓存目录 |
+| `SPARK_SWARM_AGENT_MAX_ARTIFACT_BYTES` | `104857600` | 单次任务回传 artifact 总大小上限 |
 
 建议将 `HOST_ID_FILE` 和 `OUTPUT_DIR` 设置为持久化路径，避免重启后 agent 被注册为新主机：
 
@@ -210,6 +214,13 @@ curl http://<master-ip>:8000/api/v1/hosts
 #### 使用 CLI
 
 项目安装后提供 `spark-swarm` 命令，当前版本默认连接 `http://127.0.0.1:8000`，建议在 master 机器上执行。
+也可以使用 `--master-url` 或环境变量连接远程 master：
+
+```bash
+SPARK_SWARM_MASTER_URL=http://<master-ip>:8000 uv run spark-swarm hosts
+uv run spark-swarm --help
+uv run spark-swarm tasks --master-url http://<master-ip>:8000
+```
 
 **提交任务**（提供 Dockerfile 文件路径）：
 
@@ -321,13 +332,13 @@ FROM busybox
 CMD sh -c 'echo hello > /output/result.txt && echo done'
 ```
 
-容器写入 `/output` 目录的文件，会被挂载到 worker 机器的 `<output_dir>/<task-id>/` 下保存。
+容器写入 `/output` 目录的文件，会被挂载到 worker 机器的 `<output_dir>/<task-id>/` 下保存，并在任务结束后上传到 master。
 
 ---
 
 ### 查看任务产物
 
-任务产物文件保存在**执行该任务的 agent 机器**上，路径为：
+任务产物文件会先保存在**执行该任务的 agent 机器**上：
 
 ```
 <SPARK_SWARM_AGENT_OUTPUT_DIR>/<task-id>/
@@ -339,15 +350,34 @@ CMD sh -c 'echo hello > /output/result.txt && echo done'
 ls ./agent-output/<task-id>/
 ```
 
-`master` 只记录产物文件名列表（通过 `GET /api/v1/tasks/<task-id>` 的 `output_files` 字段查看），**不保存文件内容**，也没有文件下载接口。如需获取产物，请登录到对应的 worker 机器查看。
+任务结束后，agent 会把 `/output` 下的文件内容上传给 master。通过任务详情可以查看产物列表和下载地址：
+
+```bash
+curl http://<master-ip>:8000/api/v1/tasks/<task-id>
+```
+
+响应中的关键字段：
+
+- `output_files`：产物相对路径列表
+- `artifact_urls`：可直接下载的 master API 路径
+
+下载示例：
+
+```bash
+curl -o result.txt \
+  http://<master-ip>:8000/api/v1/tasks/<task-id>/artifacts/result.txt
+```
+
+注意：当前 artifact 通过 JSON base64 回传，适合图片、日志、报告等中小文件；不要用它传输模型权重或超大数据集。
 
 ---
 
 ### 任务状态流转
 
 ```
-PENDING → SCHEDULED → BUILDING → RUNNING → DONE
+PENDING → SCHEDULED → BUILDING → RUNNING → SUCCESS
                                           → FAILED
+                                          → CANCELLED
          ↑ (agent 离线时自动退回)
 ```
 
@@ -355,8 +385,9 @@ PENDING → SCHEDULED → BUILDING → RUNNING → DONE
 - `SCHEDULED`：已分配给某台 agent，等待执行
 - `BUILDING`：agent 正在执行 `docker build`
 - `RUNNING`：agent 正在执行容器
-- `DONE`：执行成功（exit code 0）
+- `SUCCESS`：执行成功（exit code 0）
 - `FAILED`：执行失败
+- `CANCELLED`：任务已取消
 
 当 agent 超过 `SPARK_SWARM_HEARTBEAT_TIMEOUT_SECONDS`（默认 15 秒）未发送心跳，master 会将其标记为 `OFFLINE`，并把该 agent 上处于 `SCHEDULED`/`BUILDING`/`RUNNING` 的任务退回 `PENDING`，等待重新调度。
 
@@ -390,6 +421,48 @@ uv run spark-swarm logs <task-id>
 
 ---
 
+### Text-to-Image Swarm Studio
+
+本仓库包含一个基于 spark-swarm 的文本生成图片案例，代码位于 `app/image_generation_case/`。它会把用户 prompt 拆成多张图片任务，通过 master 分发给多个 agent，下载 artifact 并生成结果集，也支持本地串行 baseline 对比。
+
+启动前建议给 GPU worker 配置模型缓存和 artifact 上限：
+
+```bash
+SPARK_SWARM_AGENT_MASTER_URL=http://<master-ip>:8000 \
+SPARK_SWARM_AGENT_HOSTNAME=gpu-worker-01 \
+SPARK_SWARM_AGENT_ENABLE_GPU=true \
+SPARK_SWARM_AGENT_MODEL_CACHE_DIR=/var/lib/spark-swarm/model-cache \
+SPARK_SWARM_AGENT_MAX_ARTIFACT_BYTES=104857600 \
+uv run python -m agent.main
+```
+
+启动案例 UI：
+
+```bash
+IMAGE_CASE_MASTER_URL=http://<master-ip>:8000 \
+uv run image-generation-case-ui
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:3100
+```
+
+也可以用 CLI 提交批量生成任务：
+
+```bash
+uv run image-generation-case submit \
+  --master-url http://<master-ip>:8000 \
+  --prompt "a compact espresso maker photographed for a premium launch" \
+  --image-count 12 \
+  --wait
+```
+
+更多运行、验证和 benchmark 步骤见 `app/image_generation_case/README.md`。
+
+---
+
 ### 典型本地单机启动流程
 
 ```bash
@@ -418,8 +491,8 @@ uv run spark-swarm submit ./Dockerfile --name demo-task
 - 将该文件路径设置到持久化目录，例如 `/var/lib/spark-swarm/agent-id`
 
 **CLI 在非 master 机器上无法连接**
-- 当前 CLI 地址硬编码为 `127.0.0.1:8000`
-- 解决方法：在 master 机器上执行 CLI，或直接使用 `curl` 调用 HTTP API
+- 使用 `--master-url http://<master-ip>:8000`
+- 或设置 `SPARK_SWARM_MASTER_URL=http://<master-ip>:8000`
 
 ---
 
@@ -429,6 +502,7 @@ uv run spark-swarm submit ./Dockerfile --name demo-task
 | 环境变量 | 默认值 |
 |---|---|
 | `SPARK_SWARM_DATABASE_URL` | `sqlite:///$(pwd)/spark_swarm.db` |
+| `SPARK_SWARM_ARTIFACT_DIR` | `$(pwd)/spark_swarm_artifacts` |
 | `SPARK_SWARM_SCHEDULER_INTERVAL_SECONDS` | `5` |
 | `SPARK_SWARM_HEARTBEAT_TIMEOUT_SECONDS` | `15` |
 
@@ -440,3 +514,6 @@ uv run spark-swarm submit ./Dockerfile --name demo-task
 | `SPARK_SWARM_AGENT_HOSTNAME` | `worker` |
 | `SPARK_SWARM_AGENT_HOST_ID_FILE` | `./.spark-swarm-agent-id` |
 | `SPARK_SWARM_AGENT_OUTPUT_DIR` | `./agent-output` |
+| `SPARK_SWARM_AGENT_ENABLE_GPU` | `false` |
+| `SPARK_SWARM_AGENT_MODEL_CACHE_DIR` | 空 |
+| `SPARK_SWARM_AGENT_MAX_ARTIFACT_BYTES` | `104857600` |

@@ -1,0 +1,32 @@
+FROM $base_image
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV HF_HOME=/models/huggingface
+
+WORKDIR /workspace
+
+ARG IMAGE_CASE_DEPS_PREINSTALLED=$deps_preinstalled
+
+RUN if [ "$$IMAGE_CASE_DEPS_PREINSTALLED" != "1" ]; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+RUN if [ "$$IMAGE_CASE_DEPS_PREINSTALLED" != "1" ]; then \
+      pip install \
+      "torch>=2.2" \
+      "diffusers>=0.30" \
+      "transformers>=4.44" \
+      "accelerate>=0.33" \
+      "safetensors>=0.4" \
+      "pillow>=10.0"; \
+    fi
+
+RUN python -c "import base64, pathlib; pathlib.Path('/workspace/spec.json').write_bytes(base64.b64decode('$spec_json_b64'))"
+
+RUN python -c "import base64, pathlib; pathlib.Path('/workspace/generator.py').write_bytes(base64.b64decode('$generator_py_b64'))"
+
+CMD ["python", "/workspace/generator.py"]

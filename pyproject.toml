@@ -31,7 +31,12 @@ test = [
 testpaths = ["tests"]
 
 [tool.setuptools]
-packages = ["master", "master.api", "agent", "cli"]
+packages = ["master", "master.api", "agent", "cli", "app", "app.image_generation_case"]
+
+[tool.setuptools.package-data]
+"app.image_generation_case" = ["static/*", "docker/*", "*.Dockerfile", "*.md"]
 
 [project.scripts]
 spark-swarm = "cli.main:app"
+image-generation-case = "app.image_generation_case.cli:main"
+image-generation-case-ui = "app.image_generation_case.server:main"

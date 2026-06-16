@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from master.artifacts import artifact_urls, save_artifacts
 from master.database import get_db
 from master.models import Task, TaskStatus
 from master.schemas import TaskDetail, TaskResultUpdate, TaskStatusUpdate
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/agent/tasks", tags=["agent"])
 
 
 def _to_detail(task: Task) -> TaskDetail:
+    output_files = json.loads(task.output_files_json or "[]")
     return TaskDetail(
         id=task.id,
         name=task.name,
@@ -31,7 +33,8 @@ def _to_detail(task: Task) -> TaskDetail:
         stderr_log=task.stderr_log,
         exit_code=task.exit_code,
         error_message=task.error_message,
-        output_files=json.loads(task.output_files_json or "[]"),
+        output_files=output_files,
+        artifact_urls=artifact_urls(task.id, output_files),
     )
 
 
@@ -61,8 +64,10 @@ def update_task_result(task_id: str, payload: TaskResultUpdate, db: Session = De
     task.stderr_log = payload.stderr_log
     task.exit_code = payload.exit_code
     task.error_message = payload.error_message
-    task.output_files_json = json.dumps(payload.output_files)
+    output_files = payload.output_files or [artifact.path for artifact in payload.artifacts]
+    task.output_files_json = json.dumps(output_files)
     task.completed_at = datetime.now(timezone.utc)
+    save_artifacts(task_id, payload.artifacts)
     db.commit()
     db.refresh(task)
     return _to_detail(task)
